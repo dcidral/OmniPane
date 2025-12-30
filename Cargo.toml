@@ -8,6 +8,7 @@ authors = ["Diogo Cidral"]
 
 [dependencies]
 opencv = "0.96"
+chrono = "0.4.42"
 
 [profile.release]
 debug = "line-tables-only"

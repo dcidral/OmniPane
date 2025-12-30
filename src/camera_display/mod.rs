@@ -1,4 +1,6 @@
-use opencv::core::{Mat, Point, Vector};
+use crate::overlay_text_providers::OverlayTextProvider;
+use opencv::core::{Mat, MatTraitConst, Point, Vector};
+use opencv::imgproc::put_text;
 use opencv::videoio::{VideoCapture, VideoCaptureTrait};
 use opencv::{highgui, imgproc};
 use std::collections::VecDeque;
@@ -9,8 +11,7 @@ const WINDOW_NAME: &str = "Main Camera";
 
 const TIME_DIFF_MS: u16 = 500;
 const FRAME_DURATION_MS: u16 = 1000 / 30; // 30 frames per second
-// Number of frames between each movement check
-const N_FRAMES_MOVEMENT_CHECK: u16 = 5;
+const N_FRAMES_MOVEMENT_CHECK: u16 = 5; // Number of frames between each movement check
 
 const IMG_DIFF_THRESHOLD: f64 = 10.0;
 const MIN_CONTOUR_AREA: f64 = 10000.0;
@@ -25,7 +26,7 @@ impl fmt::Display for VideoStreamError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             VideoStreamError::OpenCv(e) => write!(f, "OpenCV error: {}", e),
-            VideoStreamError::CreateWindowError(e) => write!(f, "OpenCV error: {}", e),
+            VideoStreamError::CreateWindowError(e) => write!(f, "Create Window error: {}", e),
         }
     }
 }
@@ -48,6 +49,7 @@ struct ImageFrame {
 pub struct VideoStreamer {
     camera: VideoCapture,
     frame_buffer: VecDeque<ImageFrame>,
+    overlay_providers: Vec<Box<dyn OverlayTextProvider>>,
 }
 
 fn log_if_err<T>(result: opencv::Result<T>, label: Option<&str>) {
@@ -57,12 +59,16 @@ fn log_if_err<T>(result: opencv::Result<T>, label: Option<&str>) {
 }
 
 impl VideoStreamer {
-    pub fn new(url: String) -> VideoResult<Self> {
+    pub fn new(
+        url: String,
+        overlay_providers: Vec<Box<dyn OverlayTextProvider>>,
+    ) -> VideoResult<Self> {
         let camera = VideoCapture::from_file(url.as_str(), opencv::videoio::CAP_ANY)?;
 
         Ok(Self {
             camera,
             frame_buffer: VecDeque::new(),
+            overlay_providers,
         })
     }
 
@@ -105,13 +111,14 @@ impl VideoStreamer {
 
                     println!("Background image found at {:?}", background_image.instant);
                     contours = get_movement_contours(&img_diff)?;
-                }
-                else {
+                } else {
                     println!("No background image found for {:?}", current_frame.instant);
                 }
             }
 
             draw_contours(&contours, &mut image)?;
+
+            self.draw_overlays(&mut image);
 
             highgui::imshow(WINDOW_NAME, &image)?;
             if highgui::wait_key(FRAME_DURATION_MS as i32)? == 'q' as i32 {
@@ -122,17 +129,28 @@ impl VideoStreamer {
         Ok(())
     }
 
-    fn  get_background_image(&mut self) -> Option<ImageFrame> {
-        let background_instant = Instant::now() - Duration::from_millis((TIME_DIFF_MS + FRAME_DURATION_MS) as u64);
+    fn draw_overlays(&mut self, mut image: &mut Mat) {
+        let mut i: u8 = 0;
+        for overlay_provider in &self.overlay_providers {
+            let text = overlay_provider.get_text();
+            write_text(&mut image, i, &text);
+            if i == u8::MAX {
+                break;
+            }
+            i += 1;
+        }
+    }
+
+    fn get_background_image(&mut self) -> Option<ImageFrame> {
+        let background_instant =
+            Instant::now() - Duration::from_millis((TIME_DIFF_MS + FRAME_DURATION_MS) as u64);
 
         while !self.frame_buffer.is_empty()
             && self.frame_buffer.front().unwrap().instant < background_instant
         {
             let background_image = self.frame_buffer.pop_front().unwrap();
             let next_frame_instant = background_image.instant
-                + Duration::from_millis(
-                    (FRAME_DURATION_MS * N_FRAMES_MOVEMENT_CHECK) as u64,
-                );
+                + Duration::from_millis((FRAME_DURATION_MS * N_FRAMES_MOVEMENT_CHECK) as u64);
             if next_frame_instant > background_instant {
                 return Some(background_image);
             }
@@ -161,6 +179,28 @@ fn get_image_diff(image: &Mat, background_image: &Mat) -> VideoResult<Mat> {
     )?;
 
     Ok(thresh_diff)
+}
+
+fn write_text(image: &mut Mat, line: u8, text: &str) {
+    let line_height: i32 = 30;
+    let line_offset: i32 = 40;
+    let origin = Point::new(
+        10,
+        image.size().unwrap().height - (line as i32 * line_height + line_offset),
+    );
+
+    let color = opencv::core::Scalar::new(0.0, 255.0, 0.0, 0.0);
+    let _ = put_text(
+        image,
+        text,
+        origin,
+        imgproc::FONT_HERSHEY_SIMPLEX,
+        1.0,
+        color,
+        2,
+        imgproc::LINE_8,
+        false,
+    );
 }
 
 fn get_movement_contours(img_diff: &Mat) -> VideoResult<Vector<Vector<Point>>> {
