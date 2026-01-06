@@ -3,7 +3,7 @@ use crate::video_display::{image_manipulation, ImageFrame};
 use opencv::core::{Mat, Point, Vector};
 use opencv::hub_prelude::VideoCaptureTrait;
 use opencv::imgproc;
-use opencv::videoio::VideoCapture;
+use opencv::videoio::{VideoCapture, CAP_PROP_BUFFERSIZE};
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
@@ -22,18 +22,23 @@ pub struct VideoChannel {
 }
 
 impl VideoChannel {
-    pub(crate) fn new(camera: VideoCapture) -> Self {
+    pub(crate) fn new(mut camera: VideoCapture) -> Self {
+        /*
+        Ensure the buffer is small enough that we are always reading the latest
+        image from the stream.
+        */
+        let _ = camera.set(CAP_PROP_BUFFERSIZE, 1.0);
+
         Self {
             camera,
             frame_buffer: VecDeque::new(),
             contours: Vector::new(),
-            frame_index: 0
+            frame_index: 0,
         }
     }
 
     fn get_background_image(&mut self) -> Option<ImageFrame> {
-        let mvt_check_duration =
-            Duration::from_millis(TIME_DIFF_MS as u64);
+        let mvt_check_duration = Duration::from_millis(TIME_DIFF_MS as u64);
 
         let background_instant = Instant::now() - mvt_check_duration;
 
@@ -58,7 +63,6 @@ impl VideoChannel {
 
     pub(crate) fn create_frame_image(&mut self) -> VideoResult<Mat> {
         let mut image = Mat::default();
-
         self.camera.read(&mut image)?;
 
         let update_movement = self.frame_index % N_FRAMES_MOVEMENT_CHECK as u32 == 0;
@@ -114,7 +118,6 @@ impl VideoChannel {
         Ok(moving_parts)
     }
 }
-
 
 fn get_image_diff(image: &Mat, background_image: &Mat) -> VideoResult<Mat> {
     // compare image with background
