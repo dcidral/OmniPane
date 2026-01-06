@@ -4,7 +4,7 @@ use opencv::imgproc::put_text;
 use crate::video_display::VideoResult;
 
 pub(crate) fn write_text(image: &mut Mat, line: u8, text: &str) {
-    let line_height: i32 = 30;
+    let line_height: i32 = 38;
     let line_offset: i32 = 40;
     let origin = Point::new(
         10,
