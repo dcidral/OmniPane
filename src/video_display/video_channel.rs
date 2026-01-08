@@ -8,7 +8,7 @@ use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
 const TIME_DIFF_MS: u16 = 500;
-pub(crate) const FRAME_DURATION_MS: u16 = 1000 / 30; // 30 frames per second
+pub(crate) const FRAME_DURATION_MS: u16 = 1000 / 40; // 40 frames per second
 const N_FRAMES_MOVEMENT_CHECK: u16 = 5; // Number of frames between each movement check
 
 const IMG_DIFF_THRESHOLD: f64 = 10.0;

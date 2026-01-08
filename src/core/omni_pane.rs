@@ -1,11 +1,11 @@
-use crate::video_display::display::{DisplayWindow};
+use crate::overlay_text_providers::OverlayTextProvider;
+use crate::video_display::display::DisplayWindow;
 use crate::video_display::image_manipulation;
 use crate::video_display::video_channel;
 use crate::video_display::video_channel::VideoChannel;
-use crate::overlay_text_providers::OverlayTextProvider;
+use opencv::core::Mat;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Arc;
-use opencv::core::Mat;
 
 pub struct OmniPane {
     channels: Vec<VideoChannel>,
@@ -50,14 +50,19 @@ impl OmniPane {
     }
 
     fn draw_overlays(&mut self, mut image: &mut Mat) {
-        let mut line: u8 = 0;
+        let mut line_index: u8 = 0;
         for overlay_provider in &self.overlay_providers {
             let text = overlay_provider.get_text();
-            image_manipulation::write_text(&mut image, line, &text);
-            if line == u8::MAX {
+            image_manipulation::write_text(
+                &mut image,
+                line_index,
+                &text,
+                image_manipulation::TextPosition::BottomRight,
+            );
+            if line_index == u8::MAX {
                 break;
             }
-            line += 1;
+            line_index += 1;
         }
     }
 
