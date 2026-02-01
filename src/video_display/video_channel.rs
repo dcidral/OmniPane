@@ -7,22 +7,56 @@ use opencv::videoio::{VideoCapture, CAP_PROP_BUFFERSIZE};
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
-const TIME_DIFF_MS: u16 = 500;
-pub(crate) const FRAME_DURATION_MS: u16 = 1000 / 40; // 40 frames per second
-const N_FRAMES_MOVEMENT_CHECK: u16 = 5; // Number of frames between each movement check
-
+// TODO: does it make sense for these to be configurable?
 const IMG_DIFF_THRESHOLD: f64 = 10.0;
 const MIN_CONTOUR_AREA: f64 = 10000.0;
 
+pub struct VideoChannelSettings {
+    frame_duration: Duration,
+    mvn_update_interval: Duration,
+    mvn_comparison_interval: Duration,
+}
+
+impl VideoChannelSettings {
+    pub(crate) fn new(
+        frame_duration: Duration,
+        mvn_check_interval: Duration,
+        mvn_comparison_interval: Duration,
+    ) -> Self {
+        Self {
+            frame_duration,
+            mvn_update_interval: mvn_check_interval,
+            mvn_comparison_interval,
+        }
+    }
+
+    pub(crate) fn default() -> Self {
+        // 50 frames per second
+        let frame_duration = Duration::from_millis(1000 / 50);
+        Self::new(
+            frame_duration,
+            // Check for movement every 5 frames
+            frame_duration * 5,
+            // Use the image from 10 frames ago to compare against the current frame
+            frame_duration * 10,
+        )
+    }
+
+    pub(crate) fn get_frame_duration(&self) -> Duration {
+        self.frame_duration.clone()
+    }
+}
+
 pub struct VideoChannel {
     pub camera: VideoCapture,
+    pub settings: VideoChannelSettings,
     frame_buffer: VecDeque<ImageFrame>,
     contours: Vector<Vector<Point>>,
-    frame_index: u32,
+    last_mvn_check: Instant,
 }
 
 impl VideoChannel {
-    pub(crate) fn new(mut camera: VideoCapture) -> Self {
+    pub(crate) fn new(mut camera: VideoCapture, settings: VideoChannelSettings) -> Self {
         /*
         Ensure the buffer is small enough that we are always reading the latest
         image from the stream.
@@ -31,23 +65,21 @@ impl VideoChannel {
 
         Self {
             camera,
+            settings,
             frame_buffer: VecDeque::new(),
             contours: Vector::new(),
-            frame_index: 0,
+            last_mvn_check: Instant::now(),
         }
     }
 
     fn get_background_image(&mut self) -> Option<ImageFrame> {
-        let mvt_check_duration = Duration::from_millis(TIME_DIFF_MS as u64);
-
-        let background_instant = Instant::now() - mvt_check_duration;
+        let background_instant = Instant::now() - self.settings.mvn_comparison_interval;
 
         while !self.frame_buffer.is_empty()
             && self.frame_buffer.front().unwrap().instant < background_instant
         {
             let background_frame = self.frame_buffer.pop_front().unwrap();
-            let next_frame_instant =
-                background_instant + Duration::from_millis(FRAME_DURATION_MS as u64);
+            let next_frame_instant = background_instant + self.settings.frame_duration;
 
             if next_frame_instant > background_instant {
                 return Some(background_frame);
@@ -65,10 +97,9 @@ impl VideoChannel {
         let mut image = Mat::default();
         self.camera.read(&mut image)?;
 
-        let update_movement = self.frame_index % N_FRAMES_MOVEMENT_CHECK as u32 == 0;
-        self.frame_index = self.frame_index.wrapping_add(1);
-
+        let update_movement = self.last_mvn_check.elapsed() >= self.settings.mvn_update_interval;
         if update_movement {
+            self.last_mvn_check = Instant::now();
             let background = self.get_background_image();
 
             self.frame_buffer.push_back(ImageFrame {

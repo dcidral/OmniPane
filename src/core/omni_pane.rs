@@ -1,11 +1,11 @@
 use crate::overlay_text_providers::OverlayTextProvider;
 use crate::video_display::display::DisplayWindow;
 use crate::video_display::image_manipulation;
-use crate::video_display::video_channel;
-use crate::video_display::video_channel::VideoChannel;
+use crate::video_display::video_channel::{VideoChannel};
 use opencv::core::Mat;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 pub struct OmniPane {
     channels: Vec<VideoChannel>,
@@ -27,14 +27,16 @@ impl OmniPane {
 
     pub fn start_display(&mut self, is_running: Arc<AtomicBool>) {
         // TODO: error handling
-        let main_display = DisplayWindow::new(video_channel::FRAME_DURATION_MS as i32).unwrap();
+        let main_display = DisplayWindow::new_default().unwrap();
 
         while is_running.load(Ordering::Relaxed) {
             let camera_index = self.get_safe_camera_index();
             let camera_stream = &mut self.channels[camera_index as usize];
 
             // TODO: error handling
+            let capture_start_time = Instant::now();
             let mut image = camera_stream.create_frame_image().unwrap();
+            let mut duration = camera_stream.settings.get_frame_duration();
 
             self.draw_overlays(&mut image);
 
@@ -42,7 +44,12 @@ impl OmniPane {
             main_display.display_frame(&image).unwrap();
 
             // TODO: error handling
-            if main_display.stop_key_pressed().unwrap() {
+            if capture_start_time.elapsed() < duration {
+                duration -= capture_start_time.elapsed();
+            } else {
+                duration = Duration::from_millis(0);
+            }
+            if main_display.stop_key_pressed(duration).unwrap() {
                 // TODO: exit all services
                 break;
             }
@@ -75,9 +82,3 @@ impl OmniPane {
         current_index
     }
 }
-
-// fn log_if_err<T>(result: opencv::Result<T>, label: Option<&str>) {
-//     if let Err(e) = result {
-//         eprintln!("{} error: {}", label.unwrap_or("Unknown"), e);
-//     }
-// }

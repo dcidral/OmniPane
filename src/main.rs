@@ -6,7 +6,7 @@ use crate::core::OmniPane;
 use crate::overlay_text_providers::{
     OverlayTextProvider, TemperatureOverlayTextProvider, TimeOverlayTextProvider,
 };
-use crate::video_display::video_channel::VideoChannel;
+use crate::video_display::video_channel::{VideoChannel, VideoChannelSettings};
 use opencv::videoio::VideoCapture;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
@@ -23,7 +23,7 @@ fn main() {
         for url in url_list {
             // TODO: error handling
             let camera = VideoCapture::from_file(url.as_str(), opencv::videoio::CAP_ANY).unwrap();
-            channels.push(VideoChannel::new(camera));
+            channels.push(VideoChannel::new(camera, VideoChannelSettings::default()));
             println!("Added camera for url {}", url.as_str());
         }
 
