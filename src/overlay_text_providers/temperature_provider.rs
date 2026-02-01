@@ -28,7 +28,7 @@ impl TemperatureOverlayTextProvider {
             Some(value) => match value.trim().to_string().parse::<f32>() {
                 Ok(raw_temp) => {
                     let temperature = raw_temp / 1000.0;
-                    format!("Temp.: {:.1} °C", temperature)
+                    format!("Temperature: {:.1} C", temperature)
                 }
                 Err(_) => {
                     format!("Error parsing temperature {}", value)
