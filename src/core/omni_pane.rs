@@ -1,35 +1,51 @@
 use crate::overlay_text_providers::OverlayTextProvider;
 use crate::video_display::display::DisplayWindow;
 use crate::video_display::image_manipulation;
-use crate::video_display::video_channel::{VideoChannel};
+use crate::video_display::video_channel::{VideoChannel, VideoChannelSettings};
 use opencv::core::Mat;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use opencv::videoio::VideoCapture;
 
 pub struct OmniPane {
     channels: Vec<VideoChannel>,
     overlay_providers: Vec<Box<dyn OverlayTextProvider>>,
     pub current_camera_index: Arc<AtomicU8>,
+    pub running: Arc<AtomicBool>,
 }
 
 impl OmniPane {
     pub fn new(
-        channels: Vec<VideoChannel>,
+        channel_urls: Vec<String>,
         overlay_providers: Vec<Box<dyn OverlayTextProvider>>,
     ) -> Self {
+        let mut channels: Vec<VideoChannel> = Vec::new();
+
+        for url in channel_urls {
+            // TODO: error handling
+            let camera = VideoCapture::from_file(url.as_str(), opencv::videoio::CAP_ANY).unwrap();
+            channels.push(VideoChannel::new(camera, VideoChannelSettings::default()));
+            println!("Added camera for url {}", url.as_str());
+        }
+
         OmniPane {
             channels,
             overlay_providers,
             current_camera_index: Arc::new(AtomicU8::new(0)),
+            running: Arc::new(AtomicBool::new(true)),
         }
     }
 
-    pub fn start_display(&mut self, is_running: Arc<AtomicBool>) {
+    pub fn start(&mut self) {
+        for text_provider in &mut self.overlay_providers {
+            text_provider.start_service(self.running.clone());
+        }
+
         // TODO: error handling
         let main_display = DisplayWindow::new_default().unwrap();
 
-        while is_running.load(Ordering::Relaxed) {
+        while self.running.load(Ordering::Relaxed) {
             let camera_index = self.get_safe_camera_index();
             let camera_stream = &mut self.channels[camera_index as usize];
 
@@ -80,5 +96,9 @@ impl OmniPane {
             current_index = 0;
         }
         current_index
+    }
+
+    pub fn get_n_channels(&self) -> u8 {
+        self.channels.len().clone() as u8
     }
 }
