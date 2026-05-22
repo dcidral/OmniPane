@@ -1,13 +1,13 @@
-use opencv::core::Mat;
 use std::fmt;
 use std::time::Instant;
+use crate::wrappers::ImageBuffer;
 
 pub(crate) mod display;
 pub(crate) mod image_manipulation;
 pub(crate) mod video_channel;
 
-struct ImageFrame {
-    image: Mat,
+struct ImageFrame<T: ImageBuffer> {
+    image: T,
     instant: Instant,
 }
 

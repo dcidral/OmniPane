@@ -1,6 +1,7 @@
 use crate::video_display::VideoResult;
 use crate::video_display::{image_manipulation, ImageFrame};
-use opencv::core::{Mat, Point, Vector};
+use crate::wrappers::ImageBuffer;
+use opencv::core::{Point, Vector};
 use opencv::hub_prelude::VideoCaptureTrait;
 use opencv::imgproc;
 use opencv::videoio::{VideoCapture, CAP_PROP_BUFFERSIZE};
@@ -47,15 +48,15 @@ impl VideoChannelSettings {
     }
 }
 
-pub struct VideoChannel {
+pub struct VideoChannel<T: ImageBuffer> {
     pub camera: VideoCapture,
     pub settings: VideoChannelSettings,
-    frame_buffer: VecDeque<ImageFrame>,
+    frame_buffer: VecDeque<ImageFrame<T>>,
     contours: Vector<Vector<Point>>,
     last_mvn_check: Instant,
 }
 
-impl VideoChannel {
+impl<T: ImageBuffer> VideoChannel<T> {
     pub(crate) fn new(mut camera: VideoCapture, settings: VideoChannelSettings) -> Self {
         /*
         Ensure the buffer is small enough that we are always reading the latest
@@ -72,7 +73,7 @@ impl VideoChannel {
         }
     }
 
-    fn get_background_image(&mut self) -> Option<ImageFrame> {
+    fn get_background_image(&mut self) -> Option<ImageFrame<T>> {
         let background_instant = Instant::now() - self.settings.mvn_comparison_interval;
 
         while !self.frame_buffer.is_empty()
@@ -93,8 +94,8 @@ impl VideoChannel {
         None
     }
 
-    pub(crate) fn create_frame_image(&mut self) -> VideoResult<Mat> {
-        let mut image = Mat::default();
+    pub(crate) fn create_frame_image(&mut self) -> VideoResult<T> {
+        let mut image = T::new_empty()?;
         self.camera.read(&mut image)?;
 
         let update_movement = self.last_mvn_check.elapsed() >= self.settings.mvn_update_interval;
@@ -121,7 +122,7 @@ impl VideoChannel {
         Ok(image)
     }
 
-    fn draw_contours(&mut self, image: &mut Mat) -> VideoResult<u32> {
+    fn draw_contours(&mut self, image: &mut T) -> VideoResult<u32> {
         let mut moving_parts = 0;
         for contour in &self.contours {
             let area = imgproc::contour_area(&contour, false)?;
@@ -150,13 +151,13 @@ impl VideoChannel {
     }
 }
 
-fn get_image_diff(image: &Mat, background_image: &Mat) -> VideoResult<Mat> {
+fn get_image_diff<T: ImageBuffer>(image: &T, background_image: &T) -> VideoResult<T> {
     // compare image with background
-    let mut diff = Mat::default();
-    opencv::core::absdiff(&image, &background_image, &mut diff)?;
+    let mut diff = T::new_empty()?;
+    opencv::core::absdiff(image, background_image, &mut diff)?;
 
     // filter the diff img to get only differences larger than the defined threshold
-    let mut thresh_diff = Mat::default();
+    let mut thresh_diff = T::new_empty()?;
     imgproc::threshold(
         &diff,
         &mut thresh_diff,
@@ -168,7 +169,7 @@ fn get_image_diff(image: &Mat, background_image: &Mat) -> VideoResult<Mat> {
     Ok(thresh_diff)
 }
 
-fn get_movement_contours(img_diff: &Mat) -> VideoResult<Vector<Vector<Point>>> {
+fn get_movement_contours<T: ImageBuffer>(img_diff: &T) -> VideoResult<Vector<Vector<Point>>> {
     let kernel = imgproc::get_structuring_element(
         imgproc::MORPH_RECT,
         opencv::core::Size {
@@ -178,10 +179,10 @@ fn get_movement_contours(img_diff: &Mat) -> VideoResult<Vector<Vector<Point>>> {
         Point { x: -1, y: -1 },
     )?;
 
-    let mut dilated = Mat::default();
+    let mut dilated = T::new_empty()?;
 
     imgproc::dilate(
-        &img_diff,
+        img_diff,
         &mut dilated,
         &kernel,
         Point { x: -1, y: -1 },

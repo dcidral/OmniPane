@@ -1,5 +1,6 @@
 use crate::video_display::VideoResult;
-use opencv::core::{Mat, MatTraitConst, Point, Size};
+use crate::wrappers::ImageBuffer;
+use opencv::core::{Point, Size};
 use opencv::imgproc;
 use opencv::imgproc::{get_text_size, put_text};
 
@@ -10,7 +11,7 @@ pub(crate) enum TextPosition {
     BottomRight,
 }
 
-pub(crate) fn write_text(image: &mut Mat, line_index: u8, text: &str, position: TextPosition) {
+pub(crate) fn write_text<T: ImageBuffer>(image: &mut T, line_index: u8, text: &str, position: TextPosition) {
     let color = opencv::core::Scalar::new(0.0, 255.0, 0.0, 0.0);
     let text_font = imgproc::FONT_HERSHEY_SIMPLEX;
     let font_scale = 1.0;
@@ -65,15 +66,15 @@ fn calculate_text_origin(
     }
 }
 
-pub(crate) fn to_gray_image(image: &Mat) -> VideoResult<Mat> {
-    let mut gray = Mat::default();
-    imgproc::cvt_color(&image, &mut gray, imgproc::COLOR_BGR2GRAY, 0)?;
+pub(crate) fn to_gray_image<T: ImageBuffer>(image: &T) -> VideoResult<T> {
+    let mut gray = T::new_empty()?;
+    imgproc::cvt_color(image, &mut gray, imgproc::COLOR_BGR2GRAY, 0)?;
 
-    let blur_k_size = opencv::core::Size {
+    let blur_k_size = Size {
         width: 19,
         height: 19,
     };
-    let mut blurred_gray = Mat::default();
+    let mut blurred_gray = T::new_empty()?;
     imgproc::gaussian_blur_def(&gray, &mut blurred_gray, blur_k_size, 0.0)?;
 
     Ok(blurred_gray)

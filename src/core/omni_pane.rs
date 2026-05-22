@@ -2,25 +2,25 @@ use crate::overlay_text_providers::OverlayTextProvider;
 use crate::video_display::display::DisplayWindow;
 use crate::video_display::image_manipulation;
 use crate::video_display::video_channel::{VideoChannel, VideoChannelSettings};
-use opencv::core::Mat;
+use crate::wrappers::ImageBuffer;
+use opencv::videoio::VideoCapture;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use opencv::videoio::VideoCapture;
 
-pub struct OmniPane {
-    channels: Vec<VideoChannel>,
+pub struct OmniPane<T: ImageBuffer> {
+    channels: Vec<VideoChannel<T>>,
     overlay_providers: Vec<Box<dyn OverlayTextProvider>>,
     pub current_camera_index: Arc<AtomicU8>,
     pub running: Arc<AtomicBool>,
 }
 
-impl OmniPane {
+impl<T: ImageBuffer> OmniPane<T> {
     pub fn new(
         channel_urls: Vec<String>,
         overlay_providers: Vec<Box<dyn OverlayTextProvider>>,
     ) -> Self {
-        let mut channels: Vec<VideoChannel> = Vec::new();
+        let mut channels: Vec<VideoChannel<T>> = Vec::new();
 
         for url in channel_urls {
             // TODO: error handling
@@ -57,7 +57,8 @@ impl OmniPane {
             self.draw_overlays(&mut image);
 
             // TODO: error handling
-            main_display.display_frame(&image).unwrap();
+            let cpu_image = image.to_cpu().unwrap();
+            main_display.display_frame(&cpu_image).unwrap();
 
             // TODO: error handling
             if capture_start_time.elapsed() < duration {
@@ -72,12 +73,12 @@ impl OmniPane {
         }
     }
 
-    fn draw_overlays(&mut self, mut image: &mut Mat) {
+    fn draw_overlays(&mut self, image: &mut T) {
         let mut line_index: u8 = 0;
         for overlay_provider in &self.overlay_providers {
             let text = overlay_provider.get_text();
             image_manipulation::write_text(
-                &mut image,
+                image,
                 line_index,
                 &text,
                 image_manipulation::TextPosition::BottomRight,

@@ -1,11 +1,14 @@
 mod core;
 mod overlay_text_providers;
 mod video_display;
+mod wrappers;
 
 use crate::core::OmniPane;
 use crate::overlay_text_providers::{
     OverlayTextProvider, TemperatureOverlayTextProvider, TimeOverlayTextProvider,
 };
+use crate::wrappers::ImageBuffer;
+use opencv::core::{Mat, UMat};
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Arc;
@@ -16,29 +19,45 @@ struct Arguments {
     pub channel_urls: Vec<String>,
     pub overlay_providers: Vec<Box<dyn OverlayTextProvider>>,
     pub benchmark: bool,
+    pub use_gpu: bool,
 }
 
 fn main() {
     println!("Starting video streaming...");
 
     if let Some(args) = read_arguments() {
-        let mut omni_pane = OmniPane::new(args.channel_urls, args.overlay_providers);
+        if args.use_gpu {
+            opencv::core::set_use_opencl(true).unwrap();
 
-        if !args.benchmark {
-            camera_switcher(
-                omni_pane.current_camera_index.clone(),
-                omni_pane.get_n_channels(),
-                omni_pane.running.clone(),
-            );
+            if opencv::core::have_opencl().unwrap() && opencv::core::use_opencl().unwrap() {
+                println!("GPU acceleration with opencl enabled.");
+            } else {
+                panic!("Unable to use GPU acceleration. OpenCL not available.")
+            }
+            run_omni_pane::<UMat>(args);
+        } else {
+            run_omni_pane::<Mat>(args);
         }
-
-        omni_pane.start();
-
-        // TODO: improve services exit sync
-        omni_pane.running.store(false, Ordering::Relaxed);
     } else {
         panic!("No video stream specified!");
     }
+}
+
+fn run_omni_pane<T: ImageBuffer>(args: Arguments) {
+    let mut omni_pane = OmniPane::<T>::new(args.channel_urls, args.overlay_providers);
+
+    if !args.benchmark {
+        camera_switcher(
+            omni_pane.current_camera_index.clone(),
+            omni_pane.get_n_channels(),
+            omni_pane.running.clone(),
+        );
+    }
+
+    omni_pane.start();
+
+    // TODO: improve services exit sync
+    omni_pane.running.store(false, Ordering::Relaxed);
 }
 
 fn read_arguments() -> Option<Arguments> {
@@ -55,6 +74,7 @@ fn read_arguments() -> Option<Arguments> {
         channel_urls: vec![],
         overlay_providers: vec![],
         benchmark: false,
+        use_gpu: false,
     };
 
     while !args.is_empty() {
@@ -69,6 +89,8 @@ fn read_arguments() -> Option<Arguments> {
             arguments
                 .overlay_providers
                 .push(Box::new(TemperatureOverlayTextProvider::new(sensor_id)));
+        } else if parameter.eq_ignore_ascii_case("--gpu") {
+            arguments.use_gpu = true;
         } else if parameter.eq_ignore_ascii_case("--benchmark") {
             arguments.benchmark = true;
         } else {
