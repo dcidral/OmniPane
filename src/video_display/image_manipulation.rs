@@ -4,6 +4,7 @@ use opencv::core::{Point, Size};
 use opencv::imgproc;
 use opencv::imgproc::{get_text_size, put_text};
 
+#[allow(unused)]
 pub(crate) enum TextPosition {
     TopLeft,
     TopRight,

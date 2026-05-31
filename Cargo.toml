@@ -9,6 +9,7 @@ authors = ["Diogo Cidral"]
 [dependencies]
 opencv = "0.98.1"
 chrono = "0.4.42"
+clap = { version = "4.6.1", features = ["derive"] }
 
 [profile.release]
 debug = "line-tables-only"

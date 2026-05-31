@@ -1,4 +1,4 @@
-use crate::overlay_text_providers::OverlayTextProvider;
+use crate::services::OverlayService;
 use crate::video_display::display::DisplayWindow;
 use crate::video_display::image_manipulation;
 use crate::video_display::video_channel::{VideoChannel, VideoChannelSettings};
@@ -6,19 +6,33 @@ use crate::wrappers::ImageBuffer;
 use opencv::videoio::VideoCapture;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Arc;
+use std::thread;
 use std::time::{Duration, Instant};
 
 pub struct OmniPane<T: ImageBuffer> {
     channels: Vec<VideoChannel<T>>,
-    overlay_providers: Vec<Box<dyn OverlayTextProvider>>,
+    overlay_providers: Vec<Box<dyn OverlayService>>,
     pub current_camera_index: Arc<AtomicU8>,
     pub running: Arc<AtomicBool>,
+}
+
+// TODO: create a proper channel selector mechanism
+fn camera_switcher(camera_index: Arc<AtomicU8>, list_size: u8, running: Arc<AtomicBool>) {
+    thread::spawn(move || {
+        while running.load(Ordering::Relaxed) {
+            thread::sleep(Duration::from_secs(10));
+            let mut current_index = camera_index.load(Ordering::Relaxed);
+            current_index = (current_index + 1) % list_size;
+            println!("Changing camera to index {}", current_index);
+            camera_index.store(current_index, Ordering::Relaxed);
+        }
+    });
 }
 
 impl<T: ImageBuffer> OmniPane<T> {
     pub fn new(
         channel_urls: Vec<String>,
-        overlay_providers: Vec<Box<dyn OverlayTextProvider>>,
+        overlay_providers: Vec<Box<dyn OverlayService>>,
     ) -> Self {
         let mut channels: Vec<VideoChannel<T>> = Vec::new();
 
@@ -38,6 +52,13 @@ impl<T: ImageBuffer> OmniPane<T> {
     }
 
     pub fn start(&mut self) {
+        // TODO: create a proper channel selector mechanism
+        camera_switcher(
+            self.current_camera_index.clone(),
+            self.get_n_channels(),
+            self.running.clone(),
+        );
+
         for text_provider in &mut self.overlay_providers {
             text_provider.start_service(self.running.clone());
         }

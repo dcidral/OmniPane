@@ -9,6 +9,7 @@ pub trait ImageBuffer: ToInputArray + ToOutputArray + ToInputOutputArray + Sized
 
     fn size(&self) -> CvResult<Size>;
 
+    #[allow(unused)] // for future reference
     fn to_gpu(self) -> CvResult<UMat>;
 
     fn to_cpu(self) -> CvResult<Mat>;

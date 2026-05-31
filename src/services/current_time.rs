@@ -1,9 +1,9 @@
-use crate::overlay_text_providers::OverlayTextProvider;
+use crate::services::OverlayService;
 use chrono::Utc;
 
-pub struct TimeOverlayTextProvider {}
+pub struct CurrentTimeService {}
 
-impl TimeOverlayTextProvider {
+impl CurrentTimeService {
     pub fn new() -> Self {
         Self {}
     }
@@ -16,7 +16,7 @@ impl TimeOverlayTextProvider {
 }
 
 
-impl OverlayTextProvider for TimeOverlayTextProvider {
+impl OverlayService for CurrentTimeService {
     fn get_text(&self) -> String {
         self.get_current_time()
     }

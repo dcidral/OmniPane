@@ -1,14 +1,14 @@
-use crate::overlay_text_providers::file_polling::FilePoller;
-use crate::overlay_text_providers::OverlayTextProvider;
+use crate::services::file_polling::FilePoller;
+use crate::services::OverlayService;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Duration;
 
-pub struct TemperatureOverlayTextProvider {
+pub struct TemperatureService {
     file_poller: FilePoller,
 }
 
-impl TemperatureOverlayTextProvider {
+impl TemperatureService {
     pub fn new(sensor_id: &str) -> Self {
         let sensor_file_path = format!("/sys/bus/w1/devices/{}/w1_slave", sensor_id);
         let poll_interval = Duration::from_secs(5);
@@ -39,7 +39,7 @@ impl TemperatureOverlayTextProvider {
     }
 }
 
-impl OverlayTextProvider for TemperatureOverlayTextProvider {
+impl OverlayService for TemperatureService {
     fn get_text(&self) -> String {
         self.get_temperature_text()
     }
